@@ -2,6 +2,9 @@ import re
 import copy
 import enum
 
+import requests
+
+
 # Pure Python, usable speed but over 10x greater runtime than Cython version
 def fill(data, start_coords, fill_value):
     """
@@ -143,13 +146,20 @@ class Board:
 
         self._allowed_directions = None
         self.set_up_directions()
-        self.stack = []
         self.moves = []
 
     def __str__(self):
         return '\n'.join(''.join(str(c) for c in row) for row in self.cells)
 
     def set_up_directions(self):
+        """
+        Initialise self._allowed_directions by setting its value for every cell.
+
+        self._allowed_directions is the internal cache of which directions are
+        available from each square. This function initialises the cache.
+        Only adds to the existing directions; never removes. This is for
+        speed.
+        """
         if self._allowed_directions is None:
             self._allowed_directions = [[set() for col in range(self.width)] for row in range(self.height)]
         for row in range(self.height):
@@ -163,6 +173,12 @@ class Board:
                                 self._allowed_directions[row][col].add(direction)
 
     def allowed_directions(self, rownum=None, colnum=None):
+        """
+        Get the directions we may travel from position (rownum, colnum).
+
+        Both these arguments default to "the current position".
+        Returns a set of the Direction objects.
+        """
         if rownum is None:
             rownum = self.row
         if colnum is None:
@@ -174,22 +190,26 @@ class Board:
         """
         Undo, so that we've only made <depth> moves
         """
-        self.set_start(self.start_row, self.start_col)
         moves = self.moves[:depth]
-        self.moves = []
-        for move in moves[:depth]:
+        self.set_start(self.start_row, self.start_col)
+        for move in moves:
             self.move_direction(move)
 
     def clear_current(self):
         """
-        Resets the board.
+        Resets the board to empty state.
         """
         self.cells = copy.deepcopy(self.start_board)
 
     def set_start(self, row, col):
         """
-        Does not change self.moves.
+        Empty the board and start at the given position.
+
+        Clears the current moves; sets the start_row and start_col,
+        as well as the row and col; empties the board; resets
+        the cache of directions; sets the current row, col state to CURRENT.
         """
+        self.moves = []
         self.start_row = row
         self.start_col = col
         self.row = row
@@ -330,20 +350,43 @@ class Board:
 
         return False
 
+    def solution(self):
+        return ''.join(str(d) for d in self.moves)
+
+
+class Level:
+
+    def __init__(self, level):
+        r = requests.post('http://www.hacker.org/coil/index.php',
+                          {'name': 'laz0r',
+                           'spw': '03233c19b6de691fd1806eb1aff59f6a',
+                           'go': 'Go To Level',
+                           'gotolevel': level})
+        html_str = r.text
+        self.board = Board(html_str)
+
+    def submit(self):
+        if self.board.is_solved():
+            r = requests.post('http://www.hacker.org/coil/index.php',
+                              {'name': 'laz0r',
+                               'spw': '03233c19b6de691fd1806eb1aff59f6a',
+                               'path': self.board.solution(),
+                               'y': self.board.start_row,
+                               'x': self.board.start_col
+                               })
+            assert(r.text != "<br>your solution sucked<br><a href=index.php>back to puzzle</a>")
+            return True
+        return False
+
     def solve(self):
-        for row in range(self.height):
-            for col in range(self.width):
-                # starting positions
-                if self.state(row, col) is not Cell.EMPTY:
+        for row in range(self.board.height):
+            for col in range(self.board.width):
+                if self.board.state(row, col) is not Cell.EMPTY:
                     continue
 
-                self.moves = []
-                self.set_start(row, col)
-                if self.attempt_solution():
+                self.board.set_start(row, col)
+                if self.board.attempt_solution():
                     return True
-
-    def solution(self):
-        return ''.join(b[0] for b in self.stack if b[0] is not None)
 
 
 def board_to_str(brd):
