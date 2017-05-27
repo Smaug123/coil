@@ -386,7 +386,9 @@ class Board:
 
 
 class Level:
-    _CACHE_DIR = os.path.join(os.path.expanduser('~'), '.mortalcoil', 'cache')
+    _CONFIG_DIR = os.path.join(os.path.expanduser('~'), '.mortalcoil')
+    _CACHE_DIR = os.path.join(_CONFIG_DIR, 'cache')
+    _SPW_FILE = os.path.join(_CONFIG_DIR, 'spw.txt')
 
     @staticmethod
     def get_cache_name(level):
@@ -394,6 +396,17 @@ class Level:
         Gets the file name corresponding to the given level.
         """
         return os.path.join(Level._CACHE_DIR, str(level) + '.html')
+
+    @staticmethod
+    def get_spw():
+        if not os.path.exists(Level._SPW_FILE):
+            spw = input("Enter your SPW from http://www.hacker.org/util/getsubmitpw.php:\n")
+            with open(Level._SPW_FILE, 'w') as f:
+                f.write(spw)
+            return spw
+        else:
+            with open(Level._SPW_FILE) as f:
+                return f.read().decode("ascii")
 
     @staticmethod
     def cache_level(level):
@@ -416,7 +429,7 @@ class Level:
 
         r = requests.post('http://www.hacker.org/coil/index.php',
                           {'name': 'laz0r',
-                           'spw': '03233c19b6de691fd1806eb1aff59f6a',
+                           'spw': Level.get_spw(),
                            'go': 'Go To Level',
                            'gotolevel': level},
                           stream=True)
