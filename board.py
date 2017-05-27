@@ -1,6 +1,8 @@
+import os
 import re
 import copy
 import enum
+import errno
 
 import requests
 
@@ -76,6 +78,13 @@ class Direction(enum.Enum):
     def __str__(self):
         return self.name[0]
 
+
+def perpendicular(dir1, dir2):
+    if dir1 is Direction.LEFT or dir1 is Direction.RIGHT:
+        return dir2 is Direction.UP or dir2 is Direction.DOWN
+    if dir1 is Direction.UP or dir1 is Direction.DOWN:
+        return dir2 is Direction.LEFT or dir2 is Direction.RIGHT
+
 class DirectionError(Exception):
     pass
 
@@ -127,21 +136,31 @@ class Board:
     def set_state(self, row, col, val):
         self.cells[row][col] = val
 
-    def __init__(self, html):
+    @classmethod
+    def from_html(cls, html):
+        """
+        Creates a board from the HTML input.
+        
+        Returns the board.
+        """
+        groups = re.search(r'FlashVars" value="x=(.+)&y=(.+)&board=(.+)"', html)
+        board_str = groups.group(3)
+        height = int(groups.group(2))
+        width = int(groups.group(1))
+        return Board(height=height,
+                     width=width,
+                     cells=[[Cell(c) for c in row] for row in chunks(board_str, width)])
+
+    def __init__(self, height, width, cells):
         """
         New board.
-
-        :param html: HTML output of the server request
         """
         self.row = None
         self.col = None
+        self.height = height
+        self.width = width
+        self.cells = cells
 
-        groups = re.search(r'FlashVars" value="x=(.+)&y=(.+)&board=(.+)"', html)
-        self.height = int(groups.group(2))
-        self.width = int(groups.group(1))
-
-        board_str = groups.group(3)
-        self.cells = [[Cell(c) for c in row] for row in chunks(board_str, self.width)]
         self.start_board = copy.deepcopy(self.cells)
 
         self._allowed_directions = None
@@ -353,17 +372,73 @@ class Board:
     def solution(self):
         return ''.join(str(d) for d in self.moves)
 
+    def cells_with_two(self):
+        """
+        Returns a list of (row, col) where the cells in those positions
+        have exactly two directions out of which to go.
+        """
+        ans = []
+        for row in range(self.height):
+            for col in range(self.width):
+                if len(self.allowed_directions(row, col)) == 2:
+                    ans.append((row, col))
+        return ans
+
 
 class Level:
+    _CACHE_DIR = os.path.join(os.path.expanduser('~'), '.mortalcoil', 'cache')
 
-    def __init__(self, level):
+    @staticmethod
+    def get_cache_name(level):
+        """
+        Gets the file name corresponding to the given level.
+        """
+        return os.path.join(Level._CACHE_DIR, str(level) + '.html')
+
+    @staticmethod
+    def cache_level(level):
+        """
+        Stores a level.
+        
+        level should be the integer number of the level.
+        """
+        cache_file = Level.get_cache_name(level)
+
+        # Make the directories containing the cache file
+        dirpath = os.path.dirname(cache_file)
+        try:
+            os.makedirs(dirpath)
+        except OSError as e:
+            if e.errno == errno.EEXIST and os.path.isdir(dirpath):
+                pass
+            else:
+                raise
+
         r = requests.post('http://www.hacker.org/coil/index.php',
                           {'name': 'laz0r',
                            'spw': '03233c19b6de691fd1806eb1aff59f6a',
                            'go': 'Go To Level',
-                           'gotolevel': level})
-        html_str = r.text
-        self.board = Board(html_str)
+                           'gotolevel': level},
+                          stream=True)
+        with open(cache_file, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=1024):
+                if chunk:
+                    f.write(chunk)
+
+    @staticmethod
+    def get_cached_level(level):
+        with open(Level.get_cache_name(level)) as f:
+            return f.read()
+
+    @staticmethod
+    def level_is_known(level):
+        return os.path.exists(Level.get_cache_name(level))
+
+    def __init__(self, level):
+        if not self.level_is_known(level):
+            self.cache_level(level)
+        html_str = self.get_cached_level(level)
+        self.board = Board.from_html(html_str)
 
     def submit(self):
         if self.board.is_solved():
