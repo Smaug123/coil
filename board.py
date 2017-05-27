@@ -333,6 +333,13 @@ class Board:
         The result is a list of ((row1, col1), (row2, col2), direction, size of one chunk, size of other chunk).
         """
         cel = self.cells_with_two()
+        # cel is the cells with two neighbours.
+        # It's a broken assumption that only these can disconnect the grid.
+        # For example, there can be a bottleneck of two cells next to
+        # each other, whose removal together disconnects the graph.
+
+        # For now, keep the cells which are a bend and which don't have an empty
+        # cell in the elbow of the bend.
         pruned = []
         for c in cel:
             dirs = list(self.allowed_directions(*c))
@@ -344,6 +351,7 @@ class Board:
                     continue
                 pruned.append(c)
 
+        # For each pair of cells, do they disconnect?
         breaking_pairs = []
         pairs = itertools.combinations(pruned, 2)
         filled = {}
@@ -365,7 +373,25 @@ class Board:
                 if num_empty >= 1:
                     breaking_pairs.append((c1,c2, d, num_empty, num_current))
 
-        return breaking_pairs
+        # Sort them. Also, each pair has appeared twice, once for each
+        # direction out of the first cell; remove the duplicates.
+        breaking_pairs.sort(key=lambda tup1: abs(tup1[3]-tup1[4]))
+        pairs = [x for x in breaking_pairs if x[3] <= x[4]]
+
+        # Delete instances where filled is completely contained in another
+        seen_arrs = []
+        reduced_pairs = []
+        for p in pairs:
+            ignore = False
+            for seen in seen_arrs:
+                if seen.issubset(filled[(p[0], p[1], p[2])]):
+                    # can ignore filled
+                    ignore = True
+                    break
+            if not ignore:
+                seen_arrs.append(filled[(p[0], p[1], p[2])])
+                reduced_pairs.append(p)
+        return reduced_pairs
 
     def make_deadend_forced_moves(self):
         # If there are two dead ends, and we can move immediately into one of them, we must do so

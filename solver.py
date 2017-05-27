@@ -48,23 +48,6 @@ def attempt_level(lvl):
     return False
     print("Obtained pairs which break.")
 
-    breaking_pairs.sort(key=lambda tup1: abs(tup1[3]-tup1[4]))
-    pairs = [x for x in breaking_pairs if x[3] <= x[4]]
-    print("First pruning.")
-    # Delete instances where filled is completely contained in another
-    seen_arrs = []
-    reduced_pairs = []
-    for p in pairs:
-        ignore = False
-        for seen in seen_arrs:
-            if seen.issubset(filled[(p[0], p[1], p[2])]):
-                # can ignore filled
-                ignore = True
-                break
-        if not ignore:
-            seen_arrs.append(filled[(p[0], p[1], p[2])])
-            reduced_pairs.append(p)
-
     print('\n'.join(str(c) for c in reduced_pairs))
 
 
