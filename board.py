@@ -3,6 +3,7 @@ import re
 import copy
 import enum
 import errno
+import itertools
 
 import requests
 
@@ -323,6 +324,48 @@ class Board:
                         else:
                             deadend = (row, col)
         return False
+
+
+    def pairs_which_break(self):
+        """
+        Returns a list of pairs of squares which mutually disconnect the board.
+        
+        The result is a list of ((row1, col1), (row2, col2), direction, size of one chunk, size of other chunk).
+        """
+        cel = self.cells_with_two()
+        pruned = []
+        for c in cel:
+            dirs = list(self.allowed_directions(*c))
+            if perpendicular(*dirs):
+                move1 = self._new_indices(c[0], c[1], dirs[0])
+                move2 = self._new_indices(move1[0], move1[1], dirs[1])
+                if self.state(*move2) is Cell.EMPTY:
+                    # can't disconnect with this one
+                    continue
+                pruned.append(c)
+
+        breaking_pairs = []
+        pairs = itertools.combinations(pruned, 2)
+        filled = {}
+        num_squares = len({(i, j) for i, row in enumerate(self.cells) for j, c in enumerate(row) if c is Cell.EMPTY})
+        for c1, c2 in pairs:
+            dirs = list(self.allowed_directions(*c1))
+            for d in dirs:
+                co = copy.deepcopy(self.cells)
+                co[c1[0]][c1[1]] = Cell.BLOCKED
+                co[c2[0]][c2[1]] = Cell.BLOCKED
+                new = self._new_indices(c1[0], c1[1], d)
+                if new == c2:
+                    break
+                fill(co, new, Cell.CURRENT)
+                filled[(c1, c2, d)] = {(i, j) for i, row in enumerate(co) for j, c in enumerate(row) if c is Cell.CURRENT}
+                num_current = len(filled[(c1, c2, d)])
+                num_empty = num_squares - num_current - 2  # 2 already blocked
+
+                if num_empty >= 1:
+                    breaking_pairs.append((c1,c2, d, num_empty, num_current))
+
+        return breaking_pairs
 
     def make_deadend_forced_moves(self):
         # If there are two dead ends, and we can move immediately into one of them, we must do so
