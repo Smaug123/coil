@@ -535,7 +535,7 @@ class Level:
             return spw
         else:
             with open(Level._SPW_FILE) as f:
-                return f.read().decode("ascii")
+                return f.read()
 
     @staticmethod
     def cache_level(level):
