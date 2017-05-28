@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
-import copy
-import itertools
 import board
 
+import cProfile
 
 def str_row(row):
     return ''.join(str(c) for c in row)
@@ -41,18 +40,16 @@ def thin_array(arr):
 
 def attempt_level(lvl):
     level = board.Level(lvl)
-    print(level.board)
-    print(level.board.pairs_which_break())
-    arr = [[1 if cell is board.Cell.EMPTY else 0 for cell in row] for row in level.board.cells]
-    print(thin_array(arr))
-    return False
-    print("Obtained pairs which break.")
+    #print(level.board)
+    #print(level.board.pairs_which_break())
+    #arr = [[1 if cell is board.Cell.EMPTY else 0 for cell in row] for row in level.board.cells]
+    #print(thin_array(arr))
+    #return False
+    #print("Obtained pairs which break.")
 
-    print('\n'.join(str(c) for c in reduced_pairs))
-
-
-    return False
-    level.solve()
+    #level.solve()
+    cProfile.runctx('level.solve()', locals={'level': level}, globals={})
+    return True
     return level.submit()
 
 if __name__ == '__main__':

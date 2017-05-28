@@ -54,14 +54,23 @@ def fill(data, start_coords, fill_value):
 class Cell(enum.Enum):
     """
     A cell in a Mortal Coil board.
+    
+    VISITED_LEFT, for instance, means we left this square leftwards.
     """
     EMPTY = '.'
-    VISITED = 'O'
+    VISITED_START = 'O'
+    VISITED_LEFT = '<'
+    VISITED_RIGHT = '>'
+    VISITED_UP = '^'
+    VISITED_DOWN = 'v'
     CURRENT = '@'
     BLOCKED = 'X'
 
     def __str__(self):
         return self.value
+
+def can_visit(state):
+    return state is Cell.EMPTY
 
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
@@ -80,11 +89,25 @@ class Direction(enum.Enum):
         return self.name[0]
 
 
+def reverse_dir(direction):
+    if direction is Direction.LEFT:
+        return Direction.RIGHT
+    elif direction is Direction.RIGHT:
+        return Direction.LEFT
+    elif direction is Direction.UP:
+        return Direction.DOWN
+    elif direction is Direction.DOWN:
+        return Direction.UP
+    else:
+        assert(False)
+
+
 def perpendicular(dir1, dir2):
     if dir1 is Direction.LEFT or dir1 is Direction.RIGHT:
         return dir2 is Direction.UP or dir2 is Direction.DOWN
     if dir1 is Direction.UP or dir1 is Direction.DOWN:
         return dir2 is Direction.LEFT or dir2 is Direction.RIGHT
+
 
 class DirectionError(Exception):
     pass
@@ -106,6 +129,7 @@ class Board:
         """
         Return the new coordinates if we go in a given direction.
 
+        Ignores whether or not a square is blocked.
         Result is a pair (row, col)
         """
         if direction is Direction.LEFT:
@@ -136,6 +160,13 @@ class Board:
 
     def set_state(self, row, col, val):
         self.cells[row][col] = val
+        for direc in Direction:
+            new_indices = self._new_indices(row, col, direc)
+            if new_indices:
+                if val == Cell.EMPTY:
+                    self._allowed_directions[new_indices[0]][new_indices[1]].add(reverse_dir(direc))
+                else:
+                    self._allowed_directions[new_indices[0]][new_indices[1]] -= {reverse_dir(direc)}
 
     @classmethod
     def from_html(cls, html):
@@ -189,7 +220,7 @@ class Board:
                         res = self._new_indices(row, col, direction)
                         if res:
                             newrow, newcol = res
-                            if self.state(newrow, newcol) is Cell.EMPTY:
+                            if can_visit(self.state(newrow, newcol)):
                                 self._allowed_directions[row][col].add(direction)
 
     def allowed_directions(self, rownum=None, colnum=None):
@@ -206,14 +237,33 @@ class Board:
 
         return self._allowed_directions[rownum][colnum]
 
+    def undo_single_move(self):
+        """
+        Undoes a move, changing allowed_moves, moves, and the board.
+        """
+        prev_move = self.moves[-1]
+        back_dir = reverse_dir(prev_move)
+        self.moves = self.moves[:-1]
+        # from current position, walk in the opposite direction to prev_move
+        # until we reach a square whose state is not prev_move
+        cellstate = Cell['VISITED_{}'.format(prev_move.name)]
+        self.set_state(self.row, self.col, cellstate)
+        while self.state().name == 'VISITED_{}'.format(prev_move.name):
+            new_ind = self._new_indices(self.row, self.col, back_dir)
+            if new_ind and self.state(*new_ind) == cellstate:
+                self.set_state(self.row, self.col, Cell.EMPTY)
+                self.row, self.col = new_ind
+            else:
+                break
+
+        self.set_state(self.row, self.col, Cell.CURRENT)
+
     def undo(self, depth):
         """
         Undo, so that we've only made <depth> moves
         """
-        moves = self.moves[:depth]
-        self.set_start(self.start_row, self.start_col)
-        for move in moves:
-            self.move_direction(move)
+        for i in range(len(self.moves)-depth):
+            self.undo_single_move()
 
     def clear_current(self):
         """
@@ -250,10 +300,20 @@ class Board:
             if not res:
                 break
             new_row, new_col = res
-            if self.state(new_row, new_col) in (Cell.BLOCKED, Cell.VISITED):
+            if not can_visit(self.state(new_row, new_col)):
                 break
 
-            self.set_state(self.row, self.col, Cell.VISITED)
+            if direction is Direction.RIGHT:
+                self.set_state(self.row, self.col, Cell.VISITED_RIGHT)
+            elif direction is Direction.LEFT:
+                self.set_state(self.row, self.col, Cell.VISITED_LEFT)
+            elif direction is Direction.UP:
+                self.set_state(self.row, self.col, Cell.VISITED_UP)
+            elif direction is Direction.DOWN:
+                self.set_state(self.row, self.col, Cell.VISITED_DOWN)
+            else:
+                assert(False)
+
             if self.col < self.width-1 and Direction.LEFT in self._allowed_directions[self.row][self.col+1]:
                 self._allowed_directions[self.row][self.col+1].remove(Direction.LEFT)
             if self.col > 0 and Direction.RIGHT in self._allowed_directions[self.row][self.col-1]:
@@ -284,7 +344,7 @@ class Board:
     def is_solved(self):
         for slice in self.cells:
             for c in slice:
-                if c not in (Cell.VISITED, Cell.BLOCKED, Cell.CURRENT):
+                if can_visit(c):
                     return False
         return True
 
@@ -536,6 +596,7 @@ class Level:
         return False
 
     def solve(self):
+        print(self.board)
         for row in range(self.board.height):
             for col in range(self.board.width):
                 if self.board.state(row, col) is not Cell.EMPTY:
@@ -543,6 +604,10 @@ class Level:
 
                 self.board.set_start(row, col)
                 if self.board.attempt_solution():
+                    print(self.board)
+                    print(self.board.solution())
+                    print(self.board.start_row)
+                    print(self.board.start_col)
                     return True
 
 
