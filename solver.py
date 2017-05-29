@@ -49,11 +49,12 @@ def attempt_level(lvl):
 
     #level.solve()
     cProfile.runctx('level.solve()', locals={'level': level}, globals={})
-    return True
     return level.submit()
 
 if __name__ == '__main__':
-    for i in range(20,21):
+    for i in range(37,38):
+        print(i)
         if not attempt_level(i):
+            print(i)
             exit(1)
         print('{} done.'.format(i))

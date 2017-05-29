@@ -3,10 +3,12 @@ import re
 import copy
 import enum
 import errno
+import logging
 import itertools
 
 import requests
 
+logging.basicConfig(filename='coil_solver.log', level=logging.WARNING)
 
 # Pure Python, usable speed but over 10x greater runtime than Cython version
 def fill(data, start_coords, fill_value):
@@ -165,6 +167,8 @@ class Board:
             if new_indices:
                 if val == Cell.EMPTY:
                     self._allowed_directions[new_indices[0]][new_indices[1]].add(reverse_dir(direc))
+                    if can_visit(self.state(*new_indices)):
+                        self._allowed_directions[row] [col].add(direc)
                 else:
                     self._allowed_directions[new_indices[0]][new_indices[1]] -= {reverse_dir(direc)}
 
@@ -300,6 +304,8 @@ class Board:
             if not res:
                 break
             new_row, new_col = res
+            logging.debug("At {},{}; trying to visit {},{}".format(self.row, self.col, new_row, new_col))
+            logging.debug("can_visit: {}".format(can_visit(self.state(new_row, new_col))))
             if not can_visit(self.state(new_row, new_col)):
                 break
 
@@ -324,6 +330,14 @@ class Board:
                 self._allowed_directions[self.row-1][self.col].remove(Direction.DOWN)
             self.row, self.col = new_row, new_col
             self.set_state(self.row, self.col, Cell.CURRENT)
+            logging.debug(str(self))
+            self._print_allowed()
+            logging.debug('<><><>')
+        logging.debug("Moving in direction {} complete.".format(direction))
+
+    def _print_allowed(self):
+        for r in self._allowed_directions:
+            logging.debug(','.join(str({str(d) for d in s}) for s in r))
 
     def make_trivial_forced_moves(self):
         """
@@ -485,15 +499,20 @@ class Board:
           if we succeed, return True
         """
         curr_stack_lvl = len(self.moves)
+        self._print_allowed()
         for direction in list(self.allowed_directions()):
             self.move_direction(direction)
             self.make_forced_moves()
+            self._print_allowed()
+            logging.debug('{}, {}'.format(self.row, self.col))
+            logging.debug('===')
             if not self.is_solved() and not self.unsolvable():
                 if self.attempt_solution():
                     return True
             elif self.is_solved():
                 return True
 
+            logging.debug("Undoing to level {}".format(curr_stack_lvl))
             self.undo(depth=curr_stack_lvl)
 
         return False
@@ -596,7 +615,7 @@ class Level:
         return False
 
     def solve(self):
-        print(self.board)
+        logging.debug(str(self.board))
         for row in range(self.board.height):
             for col in range(self.board.width):
                 if self.board.state(row, col) is not Cell.EMPTY:
